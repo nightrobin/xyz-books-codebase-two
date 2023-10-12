@@ -83,14 +83,14 @@ func callBookIndex(resultChannel chan model.BookResponse) {
 }
 
 func ConvertIsbn(bookResponse model.BookResponse) {
-	for _, book := range bookResponse.Data {
-		if len(book.Isbn13) != 0 && len(book.Isbn10) == 0{
-			book.Isbn10 = convertIsbn13ToIsbn10(book.Isbn13)
-			fmt.Println(book)
-		} else {
-			convertIsbn10ToIsbn13()
+	for i := 0; i < len(bookResponse.Data); i++ {
+		if len(bookResponse.Data[i].Isbn13) != 0 && len(bookResponse.Data[i].Isbn10) == 0{
+			bookResponse.Data[i].Isbn10 = convertIsbn13ToIsbn10(bookResponse.Data[i].Isbn13)
+		} else if  len(bookResponse.Data[i].Isbn10) != 0 && len(bookResponse.Data[i].Isbn13) == 0 {
+			bookResponse.Data[i].Isbn13 = convertIsbn10ToIsbn13(bookResponse.Data[i].Isbn10)
 		}
 	}
+	fmt.Println(bookResponse.Data)
 }
 
 func convertIsbn13ToIsbn10(isbn string) string {
@@ -114,6 +114,22 @@ func convertIsbn13ToIsbn10(isbn string) string {
 	return newIsbn
 }
 
-func convertIsbn10ToIsbn13() {
-
+func convertIsbn10ToIsbn13(isbn string) string {
+	isbn = "978" + isbn
+	var isbnArr = strings.Split(isbn, "")
+	var isbnSum int
+	var newIsbn string
+	for i := 0; i < len(isbnArr)-1; i++ {
+		var multiplier int = 3
+		if i % 2 == 0 {
+			multiplier = 1
+		}
+		num, _ := strconv.Atoi(isbnArr[i])
+		newIsbn += strconv.Itoa(num)
+		isbnSum += num * multiplier
+		fmt.Println(num, " x ", multiplier, " = ", num * multiplier)
+	}
+	checkDigit := 10 - (isbnSum % 10) 
+	newIsbn += strconv.Itoa(checkDigit)
+	return newIsbn
 }
