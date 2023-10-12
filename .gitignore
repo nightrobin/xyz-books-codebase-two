@@ -6,5 +6,4 @@ go.work
 *.so
 *.test
 *.out
-.env
 main
