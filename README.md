@@ -8,7 +8,7 @@
 
 ## Instructions
 1. Edit and save the **.env** file that is included in the codebase 2.
-	- Input the correct API Host and API Port (default is recommended).
+	- Input the correct API Host and API Port of the codebase 1 (default is recommended).
 2. Go to the project directory via terminal.
 3. Run `go get`
 4. Run `go build` 
