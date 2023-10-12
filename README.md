@@ -15,7 +15,7 @@
 5. After a successful build, you may run the `main` executable.
 
 ## Output
-
+The CSV file will be outputted to the **output** directory of the codebase 2 project. Named, **output.csv**
 
 ## Versions used
 - Go: 1.21.1
