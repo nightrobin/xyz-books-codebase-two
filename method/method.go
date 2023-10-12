@@ -2,8 +2,8 @@ package method
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -19,8 +19,10 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var exPath string
 var apiBaseURL string
 var apiTimeout int
+var isbns []string
 
 var wg sync.WaitGroup
 
@@ -30,7 +32,7 @@ func init() {
     if err != nil {
         panic(err)
     }
-    exPath := filepath.Dir(ex)
+    exPath = filepath.Dir(ex)
 
 	err = godotenv.Load(exPath + "/.env")
 	if err != nil {
@@ -76,10 +78,8 @@ func callBookIndex(resultChannel chan model.BookResponse) {
 		log.Fatalf("impossible to read all body of response: %s", err)
 	}
 	var bookResponse model.BookResponse
-	err = json.Unmarshal(resBody, &bookResponse)
-	if err != nil {
-		fmt.Println(err.Error()) 
-	}
+	_ = json.Unmarshal(resBody, &bookResponse)
+
 	resultChannel <- bookResponse
 }
 
@@ -112,6 +112,8 @@ func convertIsbn13ToIsbn10(isbn string) string {
 	}
 	newIsbn += checkDigitChar
 
+	isbns = append(isbns, newIsbn)
+
 	return newIsbn
 }
 
@@ -129,8 +131,16 @@ func convertIsbn10ToIsbn13(isbn string) string {
 		newIsbn += strconv.Itoa(num)
 		isbnSum += num * multiplier
 	}
-	checkDigit := 10 - (isbnSum % 10) 
+	checkDigit := 0
+	remainder := isbnSum % 10
+	
+	if remainder != 0 {
+		checkDigit = 10 - remainder 
+	}
 	newIsbn += strconv.Itoa(checkDigit)
+
+	isbns = append(isbns, newIsbn)
+
 	return newIsbn
 }
 
@@ -140,6 +150,10 @@ func UpdateBookData(bookResponse *model.BookResponse) {
 		wg.Add(1)
 		go updateRoutine(bookResponse.Data[i])
 	}
+
+	wg.Add(1)
+	go appendIsbnToCSV()
+
 	wg.Wait()
 }
 
@@ -159,41 +173,60 @@ func updateRoutine(book model.Book){
 	authorIDsString := book.AuthorIDs
 	authorIDsString = strings.Replace(authorIDsString, "[", "", 1)
 	authorIDsString = strings.Replace(authorIDsString, "]", "", 1)
-	// fmt.Println(strings.Split(authorIDsString, ","))
-	// return
+
 	for _, v := range  strings.Split(authorIDsString, ",") {
 		num, _ := strconv.ParseUint(v, 10, 64)
 		bookUpdate.AuthorIDs = append(bookUpdate.AuthorIDs, num)
 	}
 
 	marshalled, err := json.Marshal(bookUpdate)
-		if err != nil {
-			log.Fatalf("impossible to marshall: %s", err)
-		}
-	
-		req, err := http.NewRequest(http.MethodPatch, apiBaseURL + "/books/" + strconv.FormatUint(book.ID, 10), bytes.NewReader(marshalled))
-		if err != nil {
-			log.Fatalf("impossible to build request: %s", err)
-		}
-	
-		req.Header.Add("Content-Type", "application/json")
-	
-		client := http.Client{Timeout: time.Duration(apiTimeout) * time.Second}
-		res, err := client.Do(req)
-		if err != nil {
-			log.Fatalf("impossible to send request: %s", err)
-		}
-		log.Printf("status Code: %d", res.StatusCode)
-	
-		defer res.Body.Close()
-		resBody, err := io.ReadAll(res.Body)
-		if err != nil {
-			log.Fatalf("impossible to read all body of response: %s", err)
-		}
-		fmt.Println(resBody)
-	
-		// err = json.Unmarshal(resBody, &dragonpayCollectionPSResponse)
-		// if err != nil {
-		// 	fmt.Println(err.Error()) 
-		// }
+
+	if err != nil {
+		log.Fatalf("impossible to marshall: %s", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, apiBaseURL + "/books/" + strconv.FormatUint(book.ID, 10), bytes.NewReader(marshalled))
+	if err != nil {
+		log.Fatalf("impossible to build request: %s", err)
+	}
+
+	req.Header.Add("Content-Type", "application/json")
+
+	client := http.Client{Timeout: time.Duration(apiTimeout) * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Fatalf("impossible to send request: %s", err)
+	}
+	log.Printf("status Code: %d", res.StatusCode)
+
+	defer res.Body.Close()
+}
+
+func appendIsbnToCSV(){
+	defer wg.Done()
+
+	csvFile, err := os.OpenFile(exPath + "/output/isbn.csv", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+    if err != nil {
+        log.Fatalf("failed opening file: %s", err)
+    }
+    defer csvFile.Close()
+
+    reader := csv.NewReader(csvFile)
+    existingCsv, _ := reader.ReadAll()
+
+    existingCsv = append(existingCsv, isbns)
+
+    csvFile, err = os.OpenFile(exPath + "/output/isbn.csv", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+    if err != nil {
+        panic(err)
+    }
+    defer csvFile.Close()
+
+    w := csv.NewWriter(csvFile)
+
+    if err := w.WriteAll(existingCsv); err != nil {
+        panic(err)
+    }
+
+    w.Flush()
 }
