@@ -145,21 +145,43 @@ func convertIsbn10ToIsbn13(isbn string) string {
 }
 
 func UpdateBookData(bookResponse *model.BookResponse) {
-
-	for i := 0; i <  len(bookResponse.Data); i++ {
-		wg.Add(1)
-		go updateRoutine(bookResponse.Data[i])
+	if len(bookResponse.Data) == 0 {
+		return
 	}
 
-	wg.Add(1)
-	go appendIsbnToCSV()
+	if len(bookResponse.Data) > 1 {
+		batches := [][]model.Book{}
+		midPoint := len(bookResponse.Data) / 2
 
-	wg.Wait()
+		batches = append(batches, bookResponse.Data[:midPoint])
+		batches = append(batches, bookResponse.Data[midPoint:])
+
+		wg.Add(1)
+		go func(){
+			defer wg.Done()
+			for i := 0; i < len(batches[0]); i++ {
+				updateRoutine(batches[0][i])
+			}
+		}()
+		
+		wg.Add(1)
+		go func(){
+			defer wg.Done()
+			for i := 0; i < len(batches[1]); i++ {
+				updateRoutine(batches[1][i])
+			}
+		}()
+
+		wg.Wait()
+
+	} else {
+		updateRoutine(bookResponse.Data[0])
+	}
+
+	
 }
 
 func updateRoutine(book model.Book){
-	defer wg.Done()
-
 	var bookUpdate model.BookUpdate
 	bookUpdate.ID = book.ID
 	bookUpdate.Title = book.Title
@@ -198,7 +220,6 @@ func updateRoutine(book model.Book){
 		log.Fatalf("impossible to send request: %s", err)
 	}
 	log.Printf("status Code: %d", res.StatusCode)
-
 	defer res.Body.Close()
 }
 
